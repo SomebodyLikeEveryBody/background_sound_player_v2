@@ -1,8 +1,6 @@
 import logging
 import subprocess
 import os
-import sys
-import psutil
 import threading
 import random
 from time import sleep
