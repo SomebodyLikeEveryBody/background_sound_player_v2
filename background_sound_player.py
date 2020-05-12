@@ -13,7 +13,6 @@ from kalliope.core.Cortex import Cortex
 logging.basicConfig()
 logger = logging.getLogger("kalliope")
 
-pid_file_path = "pid.txt"
 LOWER_VOLUME = 70
 NAME = 0
 LINK = 1
@@ -50,7 +49,6 @@ class Background_sound_player(NeuronModule):
         if self._is_parameters_ok():
             if self.state == "off":
                 self.stop_last_process()
-                self.clean_pid_file()
                 Cortex.save("current_playing_background_sound", "Aucun fond sonore lancé actuellement")
                 Cortex.save("background_mplayer_popen", 'NIL')
 
@@ -182,71 +180,20 @@ class Background_sound_player(NeuronModule):
 
         return ret_process
 
-    @staticmethod
-    def store_pid(pid):
-        """
-        Store a PID number into a file
-        :param pid: pid number to save
-        :return:
-        """
-
-        content = str(pid)
-        absolute_pid_file_path = os.path.dirname(os.path.abspath( __file__ )) + os.sep + pid_file_path
-        try:
-            with open(absolute_pid_file_path, "wb") as file_open:
-                if sys.version_info[0] == 2:
-                    file_open.write(content)
-                else:
-                    file_open.write(content.encode())
-                file_open.close()
-
-        except IOError as e:
-            logger.error("[Background_sound_player] I/O error(%s): %s", e.errno, e.strerror)
-            return False
-
-    @classmethod
-    def get_scriptdir_absolute_path(cls):
-        return os.path.dirname(os.path.abspath( __file__ ))
-
-    @staticmethod
-    def load_pid():
-        """
-        Load a PID number from the pid.txt file
-        :return:
-        """
-        absolute_pid_file_path = Background_sound_player.get_scriptdir_absolute_path() + os.sep + pid_file_path
-
-        if os.path.isfile(absolute_pid_file_path):
-            try:
-                with open(absolute_pid_file_path, "r") as file_open:
-                    pid_str = file_open.readline()
-                    if pid_str:
-                        return int(pid_str)
-
-            except IOError as e:
-                logger.debug("[Background_sound_player] I/O error(%s): %s", e.errno, e.strerror)
-                return False
-        return False
-
     def stop_last_process(self):
         """
         stop the last mplayer process launched by this neuron
         :return:
         """
-        pid = self.load_pid()
 
-        if pid is not None:
-            logger.debug("[Background_sound_player] loaded pid: %s" % pid)
-            try:
-                p = psutil.Process(pid)
-                p.kill()
-                logger.debug("[Background_sound_player] mplayer process with pid %s killed" % pid)
-                Cortex.save("current_playing_background_sound", "Aucun fond sonore lancé actuellement")
-                Cortex.save("background_mplayer_popen", 'NIL')
-            except psutil.NoSuchProcess:
-                logger.debug("[Background_sound_player] the process PID %s does not exist" % pid)
+        if self.mplayer_popen_obj is not None:
+            logger.debug("[Background_sound_player] loaded pid: %s" % self.mplayer_popen_obj.pid)
+            self.mplayer_popen_obj.kill()
+            logger.debug("[Background_sound_player] mplayer process with pid %s killed" % self.mplayer_popen_obj.pid)
+            Cortex.save("current_playing_background_sound", "Aucun fond sonore lancé actuellement")
+            Cortex.save("background_mplayer_popen", 'NIL')
         else:
-            logger.debug("[Background_sound_player] pid is null. Process already stopped")
+            logger.debug("[Background_sound_player] Popen object is None. Process already stopped")
 
     def start_new_process(self, sound_arg):
         """
@@ -278,24 +225,6 @@ class Background_sound_player(NeuronModule):
         process = subprocess.Popen(mplayer_command, stdout=fnull, stderr=fnull, stdin=subprocess.PIPE, universal_newlines=True)
         pid = process.pid
 
-        # store the pid in a file to be killed later
-        self.store_pid(pid)
         Cortex.save("current_playing_background_sound", sound_name)
         Cortex.save("background_mplayer_popen", process)
         logger.debug("[Background_sound_player] Mplayer started, pid: %s" % pid)
-
-    @staticmethod
-    def clean_pid_file():
-        """
-        Clean up all data stored in the pid.txt file
-        """
-
-        absolute_pid_file_path = Background_sound_player.get_scriptdir_absolute_path() + os.sep + pid_file_path
-        try:
-            with open(absolute_pid_file_path, "w") as file_open:
-                file_open.close()
-                logger.debug("[Background_sound_player] pid file cleaned")
-
-        except IOError as e:
-            logger.error("I/O error(%s): %s", e.errno, e.strerror)
-            return False
