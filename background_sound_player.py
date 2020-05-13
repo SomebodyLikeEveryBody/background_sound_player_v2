@@ -30,7 +30,7 @@ class Background_sound_player(NeuronModule):
         self.loop_option = kwargs.get('loop_option', 'no-loop')                 # "loop" / "no-loop"
         self.mplayer_path = kwargs.get('mplayer_path', "/usr/bin/mplayer")      
         self.auto_stop_minutes = kwargs.get('auto_stop_minutes', None)
-        self.volume = kwargs.get('volume', '100')
+        self.launch_volume = kwargs.get('launch_volume', LOWER_VOLUME)
 
         self.currently_playing_sound = None
         self.mplayer_popen_obj = self.get_mplayer_popen_obj()
@@ -126,7 +126,7 @@ class Background_sound_player(NeuronModule):
         print('highering sound')
         if self.mplayer_popen_obj is not None:
             self.mplayer_popen_obj.stdin.flush()
-            self.mplayer_popen_obj.stdin.write('pausing_keep_force volume ' + self.volume + ' 100\n')
+            self.mplayer_popen_obj.stdin.write('pausing_keep_force volume 100 100\n')
             self.mplayer_popen_obj.stdin.flush()
 
     def _is_parameters_ok(self):
@@ -136,7 +136,7 @@ class Background_sound_player(NeuronModule):
         """
 
         if self.state not in ["on", "off", "lower_for_speaking", "higher_wonce_spoken"]:
-            raise InvalidParameterException("[Background_sound_player] State must be 'on' or 'off'")
+            raise InvalidParameterException("[Background_sound_player] State must be 'on', 'off', 'lower_for_speaking' or 'higher_wonce_spoken'")
 
         if self.state == "on":
             if self.sounds is None:
@@ -151,11 +151,11 @@ class Background_sound_player(NeuronModule):
                 raise ValueError("[Background_sound_player] loop_option parameter must be \"loop\" OR \"no-loop\" if specified")
 
             try:
-                int(self.volume)
+                int(self.launch_volume)
             except ValueError:
-                raise ValueError("[Background_sound_player] volume parameter must be \"-[Number between 0 and 100]\", for example: \"70\"")
+                raise ValueError("[Background_sound_player] launch_volume parameter must be \"-[Number between 0 and 100]\", for example: \"70\"")
                 
-            if not 0 <= int(self.volume) <= 100:
+            if not 0 <= int(self.launch_volume) <= 100:
                 raise ValueError("[Background_sound_player] volume parameter must be \"-[Number between 0 and 100]\", for example: \"70\"")
 
         # if wait auto_stop_minutes is set, must be an integer or string convertible to integer
@@ -201,7 +201,7 @@ class Background_sound_player(NeuronModule):
         :return:
         """
         mplayer_exec_path = [self.mplayer_path]
-        mplayer_options = ['-slave', '-quiet', '-af', 'volume=-10' '-volume', str(LOWER_VOLUME), '-loop']
+        mplayer_options = ['-slave', '-quiet', '-af', 'volume=-10', '-volume', str(self.launch_volume), '-loop']
         mplayer_options.append("0" if self.loop_option == "loop" else "1")
 
         mplayer_command = list()
@@ -221,8 +221,8 @@ class Background_sound_player(NeuronModule):
         # run mplayer in background inside a new process
         fnull = open(os.devnull, 'w')
         process = subprocess.Popen(mplayer_command, stdout=fnull, stderr=fnull, stdin=subprocess.PIPE, universal_newlines=True)
-        pid = process.pid
+        self.lower_sound_for_speaking()
 
         Cortex.save("current_playing_background_sound", sound_name)
         Cortex.save("background_mplayer_popen", process)
-        logger.debug("[Background_sound_player] Mplayer started, pid: %s" % pid)
+        logger.debug("[Background_sound_player] Mplayer started, pid: %s" % process.pid)
